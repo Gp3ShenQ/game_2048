@@ -1,13 +1,13 @@
 <template>
-  <div class="flex flex-col justify-center items-center gap-4 bg-[#CED0CE] w-screen h-screen text-black">
+  <div class="flex flex-col justify-center items-center gap-4 bg-[#A9D3C1] w-screen h-screen text-black">
     <h1 class="font-black text-6xl text-center">2048</h1>
     <div class="flex gap-5">
       <button class="bg-[#475841] px-4 py-2 rounded-xl font-bold text-white cursor-pointer" @click="chooseCell(2)">2 X 2</button>
       <button class="bg-[#475841] px-4 py-2 rounded-xl font-bold text-white cursor-pointer" @click="chooseCell(3)">3 X 3</button>
       <button class="bg-[#475841] px-4 py-2 rounded-xl font-bold text-white cursor-pointer" @click="chooseCell(4)">4 X 4</button>
-      <button class="bg-[#475841] px-4 py-2 rounded-xl font-bold text-white cursor-pointer" @click="chooseCell(gameType)">重新開始</button>
+      <button class="bg-[#475841] px-4 py-2 rounded-xl font-bold text-white cursor-pointer" @click="chooseCell(gameType, 'reset')">重新開始</button>
     </div>
-    <div class="flex flex-col gap-5 bg-white p-5 rounded-2xl w-full max-w-[600px] h-[600px]">
+    <div class="flex flex-col gap-5 bg-white p-5 rounded-2xl w-full max-w-[600px] h-[600px] max-[412px]:h-[400px] max-[512px]:h-[500px]">
       <template v-for="(row, index) in grid" :key="index">
         <div class="flex gap-5 h-full">
           <template v-for="(item, itemIndex) in row" :key="itemIndex">
@@ -23,17 +23,20 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script setup>
 import { ref, onMounted } from 'vue'
 
+import Swal from 'sweetalert2'
+
 const gameType = ref(2)
+const onceCheck = ref(0)
 
 // 根據遊戲類型動態生成網格
-const generateEmptyGrid = (size: number) => {
+const generateEmptyGrid = (size) => {
   return Array.from({ length: size }, () => Array(size).fill(0))
 }
 
-const changeColor = (item: number) => {
+const changeColor = (item) => {
   switch (item) {
     case 0:
       return '#E6E8E6'
@@ -67,7 +70,10 @@ const changeColor = (item: number) => {
 // 初始化網格
 const grid = ref(generateEmptyGrid(gameType.value))
 
-const chooseCell = (size: number) => {
+const chooseCell = (size, reset) => {
+  if (reset === 'reset') {
+    onceCheck.value = 0
+  }
   gameType.value = size
   grid.value = generateEmptyGrid(size)
   initializeGame()
@@ -95,22 +101,40 @@ const initializeGame = () => {
   generateRandomNumber()
 }
 
-const handleKeyPress = (event: KeyboardEvent) => {
-  switch (event.key) {
-    case 'ArrowUp':
-      moveUp()
-      break
-    case 'ArrowDown':
-      moveDown()
-      break
-    case 'ArrowLeft':
-      moveLeft()
-      break
-    case 'ArrowRight':
-      moveRight()
-      break
+const gameOverBox = () => {
+  if (onceCheck.value === 0) {
+    Swal.fire({
+      text: '已經沒有可移動',
+      showDenyButton: false,
+      showCancelButton: false,
+      confirmButtonText: '從新開始',
+      buttonsStyling: false,
+    }).then(() => {
+      onceCheck.value = 1
+      chooseCell(gameType.value, 'reset')
+    })
   }
-  generateRandomNumber()
+}
+
+const handleKeyPress = (event) => {
+  const allowedKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']
+  if (allowedKeys.includes(event.key)) {
+    switch (event.key) {
+      case 'ArrowUp':
+        moveUp()
+        break
+      case 'ArrowDown':
+        moveDown()
+        break
+      case 'ArrowLeft':
+        moveLeft()
+        break
+      case 'ArrowRight':
+        moveRight()
+        break
+    }
+    generateRandomNumber()
+  }
 }
 
 const moveLeft = () => {
@@ -125,9 +149,12 @@ const moveLeft = () => {
     row = row.filter((num) => num)
     while (row.length < gameType.value) {
       row.push(0)
-      console.log('moveLeft', row)
     }
     grid.value[i] = row
+    const _result = checkMove()
+    if (_result) {
+      gameOverBox()
+    }
   }
 }
 
@@ -143,9 +170,12 @@ const moveRight = () => {
     row = row.filter((num) => num)
     while (row.length < gameType.value) {
       row.unshift(0)
-      console.log(row)
     }
     grid.value[i] = row
+    const _result = checkMove()
+    if (_result) {
+      gameOverBox()
+    }
   }
 }
 
@@ -166,11 +196,13 @@ const moveUp = () => {
     column = column.filter((num) => num)
     while (column.length < gameType.value) {
       column.push(0)
-      console.log('moveUp-column', column)
     }
     for (let row = 0; row < gameType.value; row++) {
       grid.value[row][col] = column[row]
-      console.log('moveUp-grid', grid.value)
+      const _result = checkMove()
+      if (_result) {
+        gameOverBox()
+      }
     }
   }
 }
@@ -205,8 +237,40 @@ const moveDown = () => {
     // 更新 grid
     for (let row = 0; row < gameType.value; row++) {
       grid.value[row][col] = column[row]
+      const _result = checkMove()
+      if (_result) {
+        gameOverBox()
+      }
     }
   }
+}
+
+const checkMove = () => {
+  const size = grid.value.length
+
+  // 檢查空格
+  for (let i = 0; i < size; i++) {
+    for (let j = 0; j < size; j++) {
+      if (grid.value[i][j] === 0) {
+        return false
+      }
+    }
+  }
+
+  // 檢查相鄰格子
+  for (let i = 0; i < size; i++) {
+    for (let j = 0; j < size; j++) {
+      // 檢查右邊相鄰格子
+      if (j < size - 1 && grid.value[i][j] === grid.value[i][j + 1]) {
+        return false
+      }
+      // 檢查下方相鄰格子
+      if (i < size - 1 && grid.value[i][j] === grid.value[i + 1][j]) {
+        return false
+      }
+    }
+  }
+  return true
 }
 
 // 當組件掛載時初始化遊戲
@@ -215,3 +279,93 @@ onMounted(() => {
   window.addEventListener('keydown', handleKeyPress)
 })
 </script>
+
+<style lang="scss">
+.swal2-popup {
+  background: linear-gradient(325deg, #c6ebc6 0%, rgb(174, 214, 198) 100%, #b4d3b4 50%);
+  color: #635f5f;
+}
+
+.swal2-confirm {
+  width: auto;
+  padding-inline: 10px;
+  margin-inline: 10px;
+  height: 40px;
+  cursor: pointer;
+  min-width: 100px;
+  font-size: 16px;
+  text-align: center;
+  transition: 0.8s;
+  background-size: 280% auto;
+  background-image: linear-gradient(325deg, rgb(204, 236, 224) 0%, rgb(174, 214, 198) 55%, rgb(26, 158, 105) 90%);
+  border: none;
+  border-radius: 30px;
+  color: hsla(360 100% 100% / 1);
+  box-shadow:
+    0px 0px 5px rgb(174, 214, 198, 0.5),
+    0px 5px 5px -1px rgba(32, 105, 76, 0.25),
+    inset 1px 4px 8px rgba(66, 224, 161, 0.5),
+    inset -4px -4px 8px rgba(81, 109, 98, 0.35);
+  font-weight: bold;
+  border: none;
+  background-color: transparent;
+}
+
+.swal2-confirm:hover {
+  background-color: transparent;
+  color: rgb(3, 85, 47);
+}
+
+.swal2-confirm:is(:focus, :focus-visible, :active) {
+  background-color: transparent;
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgb(241, 229, 229),
+    0 0 0 6px #d8cdc8;
+  color: rgb(3, 85, 47);
+}
+
+.swal2-deny {
+  width: auto;
+  padding-inline: 10px;
+  margin-inline: 10px;
+  height: 40px;
+  cursor: pointer;
+  font-size: 16px;
+  text-align: center;
+  transition: 0.8s;
+  background-size: 280% auto;
+  background-image: linear-gradient(325deg, #eee1dc 0%, rgb(231, 206, 194) 55%, #aa9389 90%);
+  border: none;
+  border-radius: 30px;
+  color: hsla(360 100% 100% / 1);
+  box-shadow:
+    0px 0px 5px rgba(255, 114, 71, 0.5),
+    0px 5px 5px -1px rgba(233, 122, 58, 0.25),
+    inset 4px 4px 8px rgba(255, 214, 175, 0.5),
+    inset -4px -4px 8px rgba(216, 81, 19, 0.35);
+  font-weight: bold;
+  border: none;
+}
+
+.swal2-deny:hover {
+  background-position: right top;
+  color: #9b8b84;
+}
+
+.swal2-styled:hover {
+  background: transparent;
+}
+
+.swal2-deny:is(:focus, :focus-visible, :active) {
+  outline: none;
+  box-shadow:
+    0 0 0 3px hsla(360 100% 100% / 1),
+    0 0 0 6px #9b8b84;
+  color: #635f5f;
+}
+
+.swal2-icon {
+  border: none;
+}
+</style>
